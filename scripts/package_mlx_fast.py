@@ -55,7 +55,7 @@ tags:
 Converted from [{model}](https://huggingface.co/{model}), checkpoint revision
 `{checkpoint_revision}`. Original model, training, typed-decision interface and
 calibration: **Mark Marosi / Mapika**, based on Qwen3.5. No additional training
-or Doom-specific fine-tuning was performed for this export.
+or fine-tuning was performed for this export.
 
 ## Execution changes and credits
 

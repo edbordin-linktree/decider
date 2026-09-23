@@ -32,14 +32,14 @@ Public precompiled bundles are available; no Hugging Face login is required:
 
 | Model | Binary size | Pinned Hub revision |
 | --- | --- | --- |
-| [0.8B compact](https://huggingface.co/edbordin-linktree/decider-0.8b-executorch-mlx) | 1.41 GiB | `b1f6923125b7500044e12562ad055b77f9f282d1` |
-| [2B compact](https://huggingface.co/edbordin-linktree/decider-2b-executorch-mlx) | 3.51 GiB | `4438e96def546578d601596fc00bdb73b408c41e` |
+| [0.8B compact](https://huggingface.co/edbordin-linktree/decider-0.8b-executorch-mlx) | 1.41 GiB | `f6f0468901f8ae6a14e6c05b19f7d116b3b90377` |
+| [2B compact](https://huggingface.co/edbordin-linktree/decider-2b-executorch-mlx) | 3.51 GiB | `0ecf677be2014eb548c199597c17bc4edb5a3954` |
 
 After installing the MLX environment described below, download and serve 2B:
 
 ```sh
 .venv-mlx/bin/hf download edbordin-linktree/decider-2b-executorch-mlx \
-  --revision 4438e96def546578d601596fc00bdb73b408c41e \
+  --revision 0ecf677be2014eb548c199597c17bc4edb5a3954 \
   --local-dir artifacts/decider-2b-executorch-mlx
 (cd artifacts/decider-2b-executorch-mlx && shasum -a 256 -c SHA256SUMS)
 .venv-mlx/bin/python -m decider.serve --backend mlx \
