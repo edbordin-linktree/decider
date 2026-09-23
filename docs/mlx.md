@@ -28,6 +28,29 @@ contacting Hugging Face. The server does not export models at startup.
 
 ### Standalone compact exports
 
+Public precompiled bundles are available; no Hugging Face login is required:
+
+| Model | Binary size | Pinned Hub revision |
+| --- | --- | --- |
+| [0.8B compact](https://huggingface.co/edbordin-linktree/decider-0.8b-executorch-mlx) | 1.41 GiB | `b1f6923125b7500044e12562ad055b77f9f282d1` |
+| [2B compact](https://huggingface.co/edbordin-linktree/decider-2b-executorch-mlx) | 3.51 GiB | `4438e96def546578d601596fc00bdb73b408c41e` |
+
+After installing the MLX environment described below, download and serve 2B:
+
+```sh
+.venv-mlx/bin/hf download edbordin-linktree/decider-2b-executorch-mlx \
+  --revision 4438e96def546578d601596fc00bdb73b408c41e \
+  --local-dir artifacts/decider-2b-executorch-mlx
+(cd artifacts/decider-2b-executorch-mlx && shasum -a 256 -c SHA256SUMS)
+.venv-mlx/bin/python -m decider.serve --backend mlx \
+  --model artifacts/decider-2b-executorch-mlx/model.pte
+```
+
+For 0.8B, use its repository and revision from the table. Download the whole
+bundle, including tokenizer, metadata and checksums. The public repositories
+also retain Mapika's license and identify the exact original checkpoint revision.
+These compact bundles do not include 32k reference or vision exports.
+
 A newly generated fast export can be served directly, without a reference model:
 
 ```sh

@@ -5,6 +5,11 @@
 > Models, training and the original decision API are Mapika's work; this fork
 > changes execution, not model training. The upstream README continues below.
 
+Public compact MLX bundles: [0.8B](https://huggingface.co/edbordin-linktree/decider-0.8b-executorch-mlx)
+and [2B](https://huggingface.co/edbordin-linktree/decider-2b-executorch-mlx).
+These are short-request exports, not the full 32k models. See the
+[pinned download and serving commands](docs/mlx.md#standalone-compact-exports).
+
 [![tests](https://github.com/Mapika/decider/actions/workflows/tests.yml/badge.svg)](https://github.com/Mapika/decider/actions/workflows/tests.yml)
 [![weights](https://img.shields.io/badge/%F0%9F%A4%97%20weights-Mapika%2Fdecider--2b-yellow)](https://huggingface.co/Mapika/decider-2b)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
