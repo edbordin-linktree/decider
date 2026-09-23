@@ -1,0 +1,31 @@
+[project]
+name = "decider-mlx-runtime"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "decider",
+    "torch==2.14.0",
+    "torchao==0.18.0",
+    "executorch==1.5.0",
+    "transformers==5.17.0",
+    "numpy==2.5.3",
+    "torchvision==0.29.0",
+    "pillow==12.3.0",
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.53.0",
+    "huggingface-hub==1.32.0",
+]
+
+[tool.uv]
+required-version = ">=0.12.17"
+package = false
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+# Keep the upstream CUDA package unchanged. This project supplies the MLX stack.
+override-dependencies = ["numpy==2.5.3"]
+exclude-dependencies = ["flash-linear-attention"]
+
+[tool.uv.sources]
+decider = { path = "../..", editable = true }
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "httpx==0.28.1"]

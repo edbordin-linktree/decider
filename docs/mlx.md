@@ -15,7 +15,7 @@ from decider.mlx_backend import MLXDecider
 
 model = MLXDecider.from_pretrained(
     "edbordin-linktree/decider-2b-executorch-mlx",
-    revision="0ecf677be2014eb548c199597c17bc4edb5a3954",
+    revision="4641daf648b8577b3f7d16c77581e6483289a303",
 )
 result = model(
     {"ticket": "I was charged twice. Please refund the duplicate."},
@@ -38,7 +38,7 @@ The server accepts the same Hub IDs and manages the download/cache automatically
 ```sh
 python -m decider.serve --backend mlx \
   --model edbordin-linktree/decider-2b-executorch-mlx \
-  --revision 0ecf677be2014eb548c199597c17bc4edb5a3954
+  --revision 4641daf648b8577b3f7d16c77581e6483289a303
 ```
 
 The server binds to `127.0.0.1:8000`. Use `--host` and `--port` to change this.
@@ -46,7 +46,7 @@ The existing environment-based entry point also works:
 
 ```sh
 DECIDER_BACKEND=mlx DECIDER_MODEL=edbordin-linktree/decider-2b-executorch-mlx \
-  DECIDER_REVISION=0ecf677be2014eb548c199597c17bc4edb5a3954 \
+  DECIDER_REVISION=4641daf648b8577b3f7d16c77581e6483289a303 \
   uvicorn decider.serve:app --host 127.0.0.1 --port 8000
 ```
 
@@ -60,8 +60,8 @@ Public precompiled bundles are available; no Hugging Face login is required:
 
 | Model | Binary size | Pinned Hub revision |
 | --- | --- | --- |
-| [0.8B compact](https://huggingface.co/edbordin-linktree/decider-0.8b-executorch-mlx) | 1.41 GiB | `f6f0468901f8ae6a14e6c05b19f7d116b3b90377` |
-| [2B compact](https://huggingface.co/edbordin-linktree/decider-2b-executorch-mlx) | 3.51 GiB | `0ecf677be2014eb548c199597c17bc4edb5a3954` |
+| [0.8B compact](https://huggingface.co/edbordin-linktree/decider-0.8b-executorch-mlx) | 1.41 GiB | `d1325c1ba36409f6e9efbc431854cb83982582da` |
+| [2B compact](https://huggingface.co/edbordin-linktree/decider-2b-executorch-mlx) | 3.51 GiB | `4641daf648b8577b3f7d16c77581e6483289a303` |
 
 For 0.8B, use its repository and revision from the table in either interface.
 The public repositories
@@ -116,16 +116,26 @@ The tested stack is Python 3.12, Torch 2.14.0, ExecuTorch 1.5.0 and Transformers
 Precompiled bundles need no model export. Operation on a clean Mac without
 full Xcode has not yet been validated.
 
-Use a separate environment. Upstream Decider's CUDA-focused dependencies
-include `flash-linear-attention` and NumPy below 2, which conflict with this
-ExecuTorch environment. Run from this checkout without installing those default
-dependencies:
+Use the dedicated uv project with its committed lockfile. It selects the MLX
+stack and excludes CUDA-only `flash-linear-attention`; upstream package defaults
+remain unchanged. From this checkout:
 
 ```sh
-uv venv --python 3.12 .venv-mlx
-uv pip install --python .venv-mlx/bin/python -r scripts/requirements-mlx.txt
-uv pip install --python .venv-mlx/bin/python --no-deps .
-source .venv-mlx/bin/activate
+uv sync --project runtime/mlx --locked --no-dev
+uv run --project runtime/mlx --locked --no-dev python -m decider.serve --backend mlx \
+  --model edbordin-linktree/decider-2b-executorch-mlx
+```
+
+For the shorter `python` commands elsewhere on this page, activate
+`runtime/mlx/.venv/bin/activate` first (`source runtime/mlx/.venv/bin/activate`).
+Use `uv run --project runtime/mlx --locked python your_script.py` for Python API
+examples. Model files stay in the Hugging Face cache, outside the environment.
+
+If you do not have the fork yet, first run:
+
+```sh
+git clone --branch apple-silicon-mlx https://github.com/edbordin-linktree/decider.git
+cd decider
 ```
 
 ## Development: generate model files
@@ -137,11 +147,11 @@ xcodebuild -downloadComponent MetalToolchain
 ```
 
 ```sh
-.venv-mlx/bin/python scripts/export_mlx.py --model Mapika/decider-0.8b \
+uv run --project runtime/mlx --locked python scripts/export_mlx.py --model Mapika/decider-0.8b \
   --dynamic --length 32768 --output artifacts/decider-0.8b.pte
-.venv-mlx/bin/python scripts/export_mlx.py --model Mapika/decider-2b \
+uv run --project runtime/mlx --locked python scripts/export_mlx.py --model Mapika/decider-2b \
   --dynamic --length 32768 --output artifacts/decider-2b.pte
-.venv-mlx/bin/python scripts/export_mlx.py --model Mapika/decider-2b-vision \
+uv run --project runtime/mlx --locked python scripts/export_mlx.py --model Mapika/decider-2b-vision \
   --dynamic --length 32768 --output artifacts/decider-2b-vision.pte
 ```
 
@@ -155,7 +165,7 @@ encoder to its 7 GiB text scorer. Original checkpoint caches take extra space.
 Generate a separate packed FP16 scorer for text models:
 
 ```sh
-PYTHONPATH=. .venv-mlx/bin/python scripts/export_mlx_fast.py \
+uv run --project runtime/mlx --locked python scripts/export_mlx_fast.py \
   --model Mapika/decider-2b --dtype float16 --packed --fuse-projections \
   --fuse-norms \
   --output artifacts/decider-2b-packed-fp16.pte
@@ -170,7 +180,7 @@ the optimization. Vision does not use this path.
 For lower latency on short questions, generate a compact scorer as well:
 
 ```sh
-PYTHONPATH=. .venv-mlx/bin/python scripts/export_mlx_fast.py \
+uv run --project runtime/mlx --locked python scripts/export_mlx_fast.py \
   --model Mapika/decider-2b --dtype float16 --packed --fuse-projections \
   --fuse-norms --parallel-suffix --dynamic-batch --compact \
   --output artifacts/decider-2b-compact-fp16.pte
