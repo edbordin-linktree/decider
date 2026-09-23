@@ -4,27 +4,55 @@ The optional MLX backend runs precompiled Decider models on Apple Silicon. It
 does not use PyTorch MPS. CUDA remains the default; importing the server or
 running the CUDA backend does not import ExecuTorch or require MLX.
 
-## Serve an exported model
+## Download and call a model
 
-From the repository root, in an environment with the MLX runtime installed:
+After installing the [MLX environment](#install-the-runtime), use a
+Hugging Face model ID. The loader downloads the complete bundle once and caches
+it; you do not need to manage `.pte` files or tokenizer directories.
+
+```python
+from decider.mlx_backend import MLXDecider
+
+model = MLXDecider.from_pretrained(
+    "edbordin-linktree/decider-2b-executorch-mlx",
+    revision="0ecf677be2014eb548c199597c17bc4edb5a3954",
+)
+result = model(
+    {"ticket": "I was charged twice. Please refund the duplicate."},
+    {"team": {"type": "choice", "instructions": "Which team should handle this?",
+              "criteria": {"billing": "Charges, invoices and refunds",
+                           "technical": "Bugs and technical problems"}}},
+)
+print(result["answers"])
+```
+
+Use `local_files_only=True` to use an already cached revision offline;
+`cache_dir=...` optionally selects a different cache. `revision` is optional,
+but pinning a commit makes downloads reproducible. Only load trusted artifacts.
+No repository Python code, model export or training runs during download.
+
+## Run the HTTP server
+
+The server accepts the same Hub IDs and manages the download/cache automatically:
 
 ```sh
-python -m decider.serve --backend mlx --model artifacts/decider-2b.pte
+python -m decider.serve --backend mlx \
+  --model edbordin-linktree/decider-2b-executorch-mlx \
+  --revision 0ecf677be2014eb548c199597c17bc4edb5a3954
 ```
 
 The server binds to `127.0.0.1:8000`. Use `--host` and `--port` to change this.
 The existing environment-based entry point also works:
 
 ```sh
-DECIDER_BACKEND=mlx DECIDER_MODEL=artifacts/decider-2b.pte \
+DECIDER_BACKEND=mlx DECIDER_MODEL=edbordin-linktree/decider-2b-executorch-mlx \
+  DECIDER_REVISION=0ecf677be2014eb548c199597c17bc4edb5a3954 \
   uvicorn decider.serve:app --host 127.0.0.1 --port 8000
 ```
 
-Keep the `.pte.json` metadata and tokenizer directory beside the `.pte` file.
-Vision exports also require the image encoder `.image.pte` and processor
-directory. Newly generated bundles include calibration settings and tokenizer
-assets, so inference does not require downloading the original weights or
-contacting Hugging Face. The server does not export models at startup.
+The bundle includes calibration and tokenizer assets. After download, cached
+inference can run offline without the original checkpoint. The server does
+not export models at startup.
 
 ### Standalone compact exports
 
@@ -35,21 +63,16 @@ Public precompiled bundles are available; no Hugging Face login is required:
 | [0.8B compact](https://huggingface.co/edbordin-linktree/decider-0.8b-executorch-mlx) | 1.41 GiB | `f6f0468901f8ae6a14e6c05b19f7d116b3b90377` |
 | [2B compact](https://huggingface.co/edbordin-linktree/decider-2b-executorch-mlx) | 3.51 GiB | `0ecf677be2014eb548c199597c17bc4edb5a3954` |
 
-After installing the MLX environment described below, download and serve 2B:
-
-```sh
-.venv-mlx/bin/hf download edbordin-linktree/decider-2b-executorch-mlx \
-  --revision 0ecf677be2014eb548c199597c17bc4edb5a3954 \
-  --local-dir artifacts/decider-2b-executorch-mlx
-(cd artifacts/decider-2b-executorch-mlx && shasum -a 256 -c SHA256SUMS)
-.venv-mlx/bin/python -m decider.serve --backend mlx \
-  --model artifacts/decider-2b-executorch-mlx/model.pte
-```
-
-For 0.8B, use its repository and revision from the table. Download the whole
-bundle, including tokenizer, metadata and checksums. The public repositories
+For 0.8B, use its repository and revision from the table in either interface.
+The public repositories
 also retain Mapika's license and identify the exact original checkpoint revision.
 These compact bundles do not include 32k reference or vision exports.
+
+### Development: local artifacts
+
+Local loading remains available for export development. Either pass a `.pte`
+path to the server, or call `MLXDecider.from_pretrained(local_directory)` or
+`MLXDecider(local_pte_path)`. It is not needed for normal use.
 
 A newly generated fast export can be served directly, without a reference model:
 
@@ -86,15 +109,12 @@ The latter is a base64-encoded PNG or JPEG, without a data-URL prefix. Images
 require the vision checkpoint. Each request can include one image, at most
 1 MiB and 16 million pixels; it is fitted and padded to 256 × 256 pixels.
 
-## Generate model files separately
+## Install the runtime
 
 The tested stack is Python 3.12, Torch 2.14.0, ExecuTorch 1.5.0 and Transformers
 5.17.0 on Apple Silicon. The ExecuTorch wheel must register `MLXBackend`.
-Install Apple's Metal compiler if needed:
-
-```sh
-xcodebuild -downloadComponent MetalToolchain
-```
+Precompiled bundles need no model export. Operation on a clean Mac without
+full Xcode has not yet been validated.
 
 Use a separate environment. Upstream Decider's CUDA-focused dependencies
 include `flash-linear-attention` and NumPy below 2, which conflict with this
@@ -104,7 +124,19 @@ dependencies:
 ```sh
 uv venv --python 3.12 .venv-mlx
 uv pip install --python .venv-mlx/bin/python -r scripts/requirements-mlx.txt
+uv pip install --python .venv-mlx/bin/python --no-deps .
+source .venv-mlx/bin/activate
+```
 
+## Development: generate model files
+
+Export requires Apple's Metal compiler. Install it if needed:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+```
+
+```sh
 .venv-mlx/bin/python scripts/export_mlx.py --model Mapika/decider-0.8b \
   --dynamic --length 32768 --output artifacts/decider-0.8b.pte
 .venv-mlx/bin/python scripts/export_mlx.py --model Mapika/decider-2b \

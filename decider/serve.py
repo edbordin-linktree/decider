@@ -16,6 +16,7 @@ from decider import systemone as S1
 
 MODEL = os.environ.get("DECIDER_MODEL", "runs/r3_v2/model")
 BACKEND = os.environ.get("DECIDER_BACKEND", "cuda")
+MODEL_REVISION = os.environ.get("DECIDER_REVISION")
 MAX_BATCH = int(os.environ.get("DECIDER_MAX_BATCH", "32"))
 MAX_WAIT_MS = float(os.environ.get("DECIDER_MAX_WAIT_MS", "8"))
 BATCH_WAIT_MS = float(os.environ.get("DECIDER_BATCH_WAIT_MS", "0"))
@@ -124,7 +125,7 @@ async def _start():
     if BACKEND == "mlx":
         # Optional dependency: importing/running the CUDA server never loads ExecuTorch.
         from decider.mlx_backend import MLXEngine
-        eng = MLXEngine(MODEL)
+        eng = MLXEngine(MODEL, revision=MODEL_REVISION)
         global MODEL_NAME, TEMP, ISOLATED
         MODEL_NAME = eng.decider.name
         TEMP = float(os.environ.get("DECIDER_TEMPERATURE", eng.decider.T))
@@ -320,16 +321,20 @@ async def get_stats():
 
 def main():
     """Run the server; the existing uvicorn/environment entry point remains supported."""
-    global BACKEND, MODEL
+    global BACKEND, MODEL, MODEL_REVISION
     import argparse
     import uvicorn
     parser = argparse.ArgumentParser(description="Serve Decider with CUDA or precompiled ExecuTorch MLX models")
     parser.add_argument("--backend", choices=("cuda", "mlx"), default=BACKEND)
-    parser.add_argument("--model", default=MODEL, help="Model directory (CUDA) or precompiled .pte file (MLX)")
+    parser.add_argument("--model", default=MODEL, help="Model directory (CUDA); Hub repo ID or local .pte (MLX)")
+    parser.add_argument("--revision", default=MODEL_REVISION, help="Pin the MLX Hub bundle to a commit or tag")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
+    if args.revision and args.backend != "mlx":
+        parser.error("--revision is currently supported only with --backend mlx")
     BACKEND, MODEL = args.backend, args.model
+    MODEL_REVISION = args.revision
     uvicorn.run(app, host=args.host, port=args.port)
 
 

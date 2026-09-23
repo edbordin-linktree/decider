@@ -10,13 +10,44 @@ import threading
 from types import SimpleNamespace
 
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 from transformers import AutoTokenizer
 from decider.infer import Decider
 from decider.systemone import render_state
 
 
 class MLXDecider(Decider):
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *, revision=None,
+                        cache_dir=None, local_files_only=False, token=None,
+                        filename="model.pte"):
+        """Load a local artifact/directory or a cached Hugging Face bundle.
+
+        Pin ``revision`` to a Hub commit for reproducible downloads. No export,
+        training or repository Python code is executed. Only load trusted PTEs.
+        """
+        relative = Path(filename)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("filename must be a relative path inside the model bundle")
+        source = Path(pretrained_model_name_or_path)
+        if source.is_file():
+            artifact = source
+        elif source.is_dir():
+            artifact = source / relative
+        else:
+            snapshot = snapshot_download(
+                repo_id=str(pretrained_model_name_or_path), revision=revision,
+                cache_dir=cache_dir, local_files_only=local_files_only, token=token,
+            )
+            artifact = Path(snapshot) / relative
+        if not artifact.is_file() or not Path(str(artifact) + ".json").is_file():
+            raise FileNotFoundError(f"Expected {artifact} and its .json sidecar in the model bundle")
+        return cls(artifact)
+
+    def __call__(self, state, questions, **kwargs):
+        """Evaluate a typed-decision request with the usual token/shape checks."""
+        return self.evaluate(state, questions, **kwargs)
+
     def __init__(self, artifact):
         artifact = str(artifact)
         try:
@@ -172,8 +203,8 @@ class MLXDecider(Decider):
 class MLXEngine:
     """Serve the existing batching interface using serial, stateless MLX rows."""
 
-    def __init__(self, artifact):
-        self.decider = MLXDecider(artifact)
+    def __init__(self, artifact, revision=None):
+        self.decider = MLXDecider.from_pretrained(artifact, revision=revision)
         self.tok = self.decider.m.tok
         self.max_ctx = self.decider.length
         self.cfg = self.decider.cfg

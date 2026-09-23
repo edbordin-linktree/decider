@@ -63,25 +63,40 @@ FP16 weights/activations, FP32 recurrent state, fused projections/normalization,
 padding removal, and bounded parallel suffix recurrence. Prefixes may be shared
 within a request; no answers or state are cached across requests.
 
-Source and setup: [Decider MLX fork]({source_url}). PyTorch/ExecuTorch, Apple MLX,
+Export source: [Decider MLX fork]({source_url}). PyTorch/ExecuTorch, Apple MLX,
 Qwen and Hugging Face Transformers supply the underlying implementation and
 runtime components. No upstream endorsement is implied. The Apache-2.0 license
 is included. These are export/runtime changes, not a newly trained model.
 
-## Download and serve
+## Download and call
 
-Download the entire repository at a pinned revision using
-`huggingface_hub.snapshot_download`, then run the fork's server:
+Designed for local inference on Apple Silicon using the ExecuTorch MLX backend.
+Install the [MLX runtime and fork](https://github.com/edbordin-linktree/decider/blob/apple-silicon-mlx/docs/mlx.md#install-the-runtime), then:
 
-```sh
-python -m decider.serve --backend mlx --model /path/to/snapshot/model.pte
+```python
+from decider.mlx_backend import MLXDecider
+
+model = MLXDecider.from_pretrained("YOUR_ACCOUNT/{model.split('/')[-1]}-executorch-mlx")
+result = model(
+    {{"ticket": "I was charged twice. Please refund the duplicate."}},
+    {{"team": {{"type": "choice", "instructions": "Which team should handle this?",
+              "criteria": {{"billing": "Charges, invoices and refunds",
+                           "technical": "Bugs and technical problems"}}}}}},
+)
+print(result["answers"])
 ```
 
-Follow `docs/mlx.md` in the fork to install the Apple Silicon dependencies.
-Keep the `.pte.json` sidecar and `.pte.tokenizer/` directory beside the binary.
-Calibration and tokenizer assets are bundled for offline inference.
-This is an ExecuTorch artifact, not an `mlx-lm` or Transformers checkpoint, and
-does not run in the standard Hugging Face inference widget.
+Or start the compatible local HTTP server:
+
+```sh
+python -m decider.serve --backend mlx --model YOUR_ACCOUNT/{model.split('/')[-1]}-executorch-mlx
+```
+
+The loader downloads and caches the complete bundle automatically, including
+calibration and tokenizer assets. Set `revision="COMMIT_HASH"` in Python or
+`--revision COMMIT_HASH` on the server to pin a release. After the first download,
+Python's `local_files_only=True` loads the cached bundle offline.
+This is an ExecuTorch artifact, not an `mlx-lm` or Transformers checkpoint.
 
 Only load trusted artifacts. Verify files against `SHA256SUMS`. Provenance and
 the binary checksum are in `provenance.json`. Tested: Python 3.12, Torch 2.14.0,

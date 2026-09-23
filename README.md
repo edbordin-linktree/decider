@@ -322,7 +322,8 @@ training loop of a separate research repository; it is not in this package yet.
 ## Serve
 
 For Apple Silicon, the optional [ExecuTorch MLX backend](docs/mlx.md) serves
-precompiled models with `python -m decider.serve --backend mlx --model model.pte`.
+precompiled models directly from Hugging Face with
+`python -m decider.serve --backend mlx --model edbordin-linktree/decider-2b-executorch-mlx`.
 CUDA remains the default and does not require MLX dependencies.
 
 ```bash
