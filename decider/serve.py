@@ -15,6 +15,7 @@ from decider.infer import Decider, Example, Q, neutralize_options
 from decider import systemone as S1
 
 MODEL = os.environ.get("DECIDER_MODEL", "runs/r3_v2/model")
+BACKEND = os.environ.get("DECIDER_BACKEND", "cuda")
 MAX_BATCH = int(os.environ.get("DECIDER_MAX_BATCH", "32"))
 MAX_WAIT_MS = float(os.environ.get("DECIDER_MAX_WAIT_MS", "8"))
 BATCH_WAIT_MS = float(os.environ.get("DECIDER_BATCH_WAIT_MS", "0"))
@@ -120,15 +121,28 @@ async def batcher():
 @app.on_event("startup")
 async def _start():
     global eng, queue
+    if BACKEND == "mlx":
+        # Optional dependency: importing/running the CUDA server never loads ExecuTorch.
+        from decider.mlx_backend import MLXEngine
+        eng = MLXEngine(MODEL)
+        global MODEL_NAME, TEMP, ISOLATED
+        MODEL_NAME = eng.decider.name
+        TEMP = float(os.environ.get("DECIDER_TEMPERATURE", eng.decider.T))
+        eng.decider.T = TEMP
+        ISOLATED = eng.decider.isolated_levels
+        queue = asyncio.Queue()
+        asyncio.create_task(batcher())
+        return
+    if BACKEND != "cuda":
+        raise ValueError(f"Unknown backend: {BACKEND}")
     eng = Engine(MODEL, compile=COMPILE, fp8=FP8, conv_patch=COMPILE); print("[serve] engine", eng.cfg, flush=True)
     import json
-    global MODEL_NAME, TEMP
     try: cfg = json.load(open(os.path.join(MODEL, "decider_config.json")))
     except Exception: cfg = {}
     eng.neutralize_none = bool(cfg.get("neutralize_none", True)); MODEL_NAME = "decider-" + str(cfg.get("version", "dev"))
     TEMP = float(os.environ.get("DECIDER_TEMPERATURE", cfg.get("temperature", 1.0)))
     global RELEASE_DATE; RELEASE_DATE = str(cfg.get("release_date", RELEASE_DATE))
-    global SCHEMA_FIRST, se, squeue, ISOLATED
+    global SCHEMA_FIRST, se, squeue
     ISOLATED = bool(cfg.get("isolated_levels", False))
     # the schema cache needs the questions-first layout, which costs accuracy (about 1.5 points on fixed label sets, more on large
     # label sets and long states): on when the model's config makes it the default, or with DECIDER_SCHEMA_CACHE=1
@@ -232,6 +246,8 @@ class S1Req(BaseModel):
     model: str | None = None
     independent: bool = True
     layout: str | None = None            # "state_first" forces the uncached layout on a schema-first model
+    max_prompt_tokens: int | None = None  # MLX: includes state, questions and image tokens
+    image_base64: str | None = None      # MLX vision export: one image, resized to 256px
 
 
 def _prepare_s1(state, questions, independent):
@@ -246,6 +262,14 @@ def _prepare_s1(state, questions, independent):
 @app.post("/v1/systemone")
 async def systemone(r: S1Req):
     loop = asyncio.get_running_loop()
+    if BACKEND == "mlx":
+        try:
+            result = await loop.run_in_executor(None, lambda: eng.decider.evaluate(
+                r.state, r.questions, r.max_prompt_tokens, r.image_base64, r.independent, r.layout))
+        except (ValueError, AssertionError, TypeError, KeyError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        stats["requests"] += 1; stats["decisions"] += len(r.questions)
+        return result
     if SCHEMA_FIRST and r.layout != "state_first" and _worth_caching(r.questions, r.independent):
         try:
             rqs, h, index = await loop.run_in_executor(None, _schema_handle, r.questions, r.independent)
@@ -276,6 +300,11 @@ async def systemone(r: S1Req):
 
 @app.get("/v1/models")
 async def models():
+    if BACKEND == "mlx" and eng is not None:
+        return {"models": [{"name": MODEL_NAME}], "data": [{"id": eng.decider.metadata["model"].split("/")[-1],
+                "max_prompt_tokens": eng.decider.length, "vision": eng.decider.vision,
+                "dynamic": eng.decider.dynamic, "dtype": eng.decider.metadata.get("dtype", "float32"),
+                "compact_only": getattr(eng.decider, "compact_only", False)}]}
     return {"models": [{"name": MODEL_NAME, "description": "decider: one-pass typed decisions with calibrated probabilities", "release_date": RELEASE_DATE}]}
 
 
@@ -287,3 +316,22 @@ async def health():
 @app.get("/stats")
 async def get_stats():
     return dict(stats, engine=eng.stats if eng else None, graphs=len(eng.graphs) if eng else 0)
+
+
+def main():
+    """Run the server; the existing uvicorn/environment entry point remains supported."""
+    global BACKEND, MODEL
+    import argparse
+    import uvicorn
+    parser = argparse.ArgumentParser(description="Serve Decider with CUDA or precompiled ExecuTorch MLX models")
+    parser.add_argument("--backend", choices=("cuda", "mlx"), default=BACKEND)
+    parser.add_argument("--model", default=MODEL, help="Model directory (CUDA) or precompiled .pte file (MLX)")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+    BACKEND, MODEL = args.backend, args.model
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()

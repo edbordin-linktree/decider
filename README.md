@@ -1,5 +1,10 @@
 # decider: one-pass typed decisions with calibrated probabilities
 
+> **Apple Silicon fork:** adds optional ExecuTorch/MLX serving and compact FP16
+> exports. See [MLX setup, export instructions and limitations](docs/mlx.md).
+> Models, training and the original decision API are Mapika's work; this fork
+> changes execution, not model training. The upstream README continues below.
+
 [![tests](https://github.com/Mapika/decider/actions/workflows/tests.yml/badge.svg)](https://github.com/Mapika/decider/actions/workflows/tests.yml)
 [![weights](https://img.shields.io/badge/%F0%9F%A4%97%20weights-Mapika%2Fdecider--2b-yellow)](https://huggingface.co/Mapika/decider-2b)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -310,6 +315,10 @@ The RL stage that turns v8 into v10 (`docs/RL.md`) needs a live Chrome with Mini
 training loop of a separate research repository; it is not in this package yet.
 
 ## Serve
+
+For Apple Silicon, the optional [ExecuTorch MLX backend](docs/mlx.md) serves
+precompiled models with `python -m decider.serve --backend mlx --model model.pte`.
+CUDA remains the default and does not require MLX dependencies.
 
 ```bash
 scripts/serve.sh Mapika/decider-2b 8000
